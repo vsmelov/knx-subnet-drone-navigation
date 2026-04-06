@@ -22,15 +22,33 @@ import numpy as np
 import bittensor as bt
 
 
-def reward(expected: int, response: typing.Optional[int]) -> float:
-    if response is None:
-        return 0.0
-    return 1.0 if int(response) == int(expected) else 0.0
-
-
 def get_rewards(
     self,
-    expected: int,
-    responses: typing.List[typing.Optional[int]],
+    expected: float,
+    responses: typing.List[typing.Optional[float]],
 ) -> np.ndarray:
-    return np.array([reward(expected, r) for r in responses], dtype=np.float32)
+    """
+    Winner-take-all (split ties): highest reward to miner(s) with smallest |response - expected|.
+    """
+    n = len(responses)
+    errs = np.full(n, np.inf, dtype=np.float64)
+    for i, r in enumerate(responses):
+        if r is None:
+            continue
+        try:
+            errs[i] = abs(float(r) - float(expected))
+        except (TypeError, ValueError):
+            errs[i] = np.inf
+
+    finite = errs[np.isfinite(errs)]
+    if finite.size == 0:
+        bt.logging.warning("No valid miner responses for reward.")
+        return np.zeros(n, dtype=np.float32)
+
+    best = float(np.min(finite))
+    winners = np.isfinite(errs) & (errs <= best + 1e-6)
+    k = int(np.sum(winners))
+    out = np.zeros(n, dtype=np.float32)
+    if k > 0:
+        out[winners] = 1.0 / k
+    return out

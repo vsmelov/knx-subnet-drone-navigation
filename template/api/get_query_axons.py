@@ -115,10 +115,10 @@ async def get_query_api_axons(
     Returns:
         list: A list of axon objects for the available API nodes.
     """
-    dendrite = bt.dendrite(wallet=wallet)
+    dendrite = bt.Dendrite(wallet=wallet)
 
     if metagraph is None:
-        metagraph = bt.metagraph(netuid=21)
+        metagraph = bt.Metagraph(netuid=21)
 
     if uids is not None:
         query_uids = [uids] if isinstance(uids, int) else uids

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["template", "neurons", "scripts", "tests", "verify"]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes (undefined names, unused imports)
+  "I",   # isort
+  "UP",  # pyupgrade
+]
+ignore = [
+  "E501",  # line length (match legacy template)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E402"]
+
+# Pyright: catches many wrong attributes if the library ships types.
+# Run: pip install -r requirements-dev.txt && pyright (from subnet-math/)
+[tool.pyright]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+include = ["template", "neurons", "scripts", "tests", "verify"]
+exclude = ["**/docs/**", "**/.venv/**", "**/env/**"]
+reportMissingImports = true
+reportMissingModuleSource = false
+# bittensor (9.7.x) is dynamic; reduce noise from incomplete stubs
+reportUnknownMemberType = false
+reportUnknownArgumentType = false

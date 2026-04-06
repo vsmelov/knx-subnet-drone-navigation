@@ -12,6 +12,20 @@ from template.protocol import ALLOWED_OPS
 _OPS = {"+": operator.add, "-": operator.sub, "*": operator.mul}
 
 
+class MockWallet:
+    """
+    Minimal stand-in for tests / --mock. Public SDK 9.7 does not ship bt.MockWallet on the
+    top-level module; only hotkey/coldkey with ss58 are required for MockSubtensor.
+    """
+
+    def __init__(self, config=None):
+        self.hotkey = bt.Keypair.create_from_uri("//subnet-math-mock-hotkey")
+        self.coldkey = bt.Keypair.create_from_uri("//subnet-math-mock-coldkey")
+
+    def __str__(self) -> str:
+        return f"MockWallet({self.hotkey.ss58_address})"
+
+
 class MockSubtensor(bt.MockSubtensor):
     def __init__(self, netuid, n=16, wallet=None, network="mock"):
         super().__init__(network=network)
@@ -40,7 +54,7 @@ class MockSubtensor(bt.MockSubtensor):
             )
 
 
-class MockMetagraph(bt.metagraph):
+class MockMetagraph(bt.Metagraph):
     def __init__(self, netuid=1, network="mock", subtensor=None):
         super().__init__(netuid=netuid, network=network, sync=False)
 
@@ -56,7 +70,7 @@ class MockMetagraph(bt.metagraph):
         bt.logging.info(f"Axons: {self.axons}")
 
 
-class MockDendrite(bt.dendrite):
+class MockDendrite(bt.Dendrite):
     """
     Replaces a real bittensor network request with a mock request that just returns some static response for all axons that are passed and adds some random delay.
     """
@@ -66,7 +80,7 @@ class MockDendrite(bt.dendrite):
 
     async def forward(
         self,
-        axons: List[bt.axon],
+        axons: List[bt.Axon],
         synapse: bt.Synapse = bt.Synapse(),
         timeout: float = 12,
         deserialize: bool = True,
@@ -93,16 +107,17 @@ class MockDendrite(bt.dendrite):
                     # TODO (developer): replace with your own expected synapse data
                     op = (s.op or "").strip()
                     if op in ALLOWED_OPS:
-                        s.result = int(
+                        ex = float(
                             _OPS[op](int(s.operand_a), int(s.operand_b))
                         )
+                        s.result = ex + random.uniform(-0.1, 0.1)
                     else:
                         s.result = None
                     s.dendrite.status_code = 200
                     s.dendrite.status_message = "OK"
                     synapse.dendrite.process_time = str(process_time)
                 else:
-                    s.result = int(s.operand_a)
+                    s.result = float(s.operand_a)
                     s.dendrite.status_code = 408
                     s.dendrite.status_message = "Timeout"
                     synapse.dendrite.process_time = str(timeout)

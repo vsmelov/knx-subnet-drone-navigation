@@ -59,7 +59,7 @@ class BaseValidatorNeuron(BaseNeuron):
         if self.config.mock:
             self.dendrite = MockDendrite(wallet=self.wallet)
         else:
-            self.dendrite = bt.dendrite(wallet=self.wallet)
+            self.dendrite = bt.Dendrite(wallet=self.wallet)
         bt.logging.info(f"Dendrite: {self.dendrite}")
 
         # Set up initial scoring weights for validation
@@ -89,8 +89,7 @@ class BaseValidatorNeuron(BaseNeuron):
 
         bt.logging.info("serving ip to chain...")
         try:
-            self.axon = bt.axon(wallet=self.wallet, config=self.config)
-
+            self.axon = bt.Axon(wallet=self.wallet, config=self.config)
             try:
                 self.subtensor.serve_axon(
                     netuid=self.config.netuid,
@@ -101,13 +100,10 @@ class BaseValidatorNeuron(BaseNeuron):
                 )
             except Exception as e:
                 bt.logging.error(f"Failed to serve Axon with exception: {e}")
-                pass
-
         except Exception as e:
             bt.logging.error(
                 f"Failed to create Axon initialize with exception: {e}"
             )
-            pass
 
     async def concurrent_forward(self):
         coroutines = [

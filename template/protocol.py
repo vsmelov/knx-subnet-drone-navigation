@@ -25,14 +25,15 @@ ALLOWED_OPS = ("+", "-", "*")
 
 class MathSynapse(bt.Synapse):
     """
-    Arithmetic protocol: validator sends two integers and an operator; miner returns the integer result.
+    Arithmetic protocol: validator sends two integers and an operator; miner returns a float answer.
+    Miners add small noise (dev/demo); validators score by who is closest to the true value.
     Supported operators: +, -, * (no eval).
     """
 
     operand_a: int
     operand_b: int
     op: str
-    result: typing.Optional[int] = None
+    result: typing.Optional[float] = None
 
-    def deserialize(self) -> int:
+    def deserialize(self) -> float:
         return self.result

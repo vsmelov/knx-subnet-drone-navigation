@@ -18,6 +18,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import operator
+import random
 import time
 import typing
 import bittensor as bt
@@ -55,11 +56,11 @@ class Miner(BaseMinerNeuron):
             bt.logging.warning(f"Unsupported op {synapse.op!r}")
             return synapse
         fn = _OPS[op]
-        synapse.result = int(
-            fn(int(synapse.operand_a), int(synapse.operand_b))
-        )
+        exact = float(fn(int(synapse.operand_a), int(synapse.operand_b)))
+        noise = random.uniform(-0.1, 0.1)
+        synapse.result = exact + noise
         bt.logging.info(
-            f"Math: {synapse.operand_a} {op} {synapse.operand_b} = {synapse.result}"
+            f"Math: {synapse.operand_a} {op} {synapse.operand_b} -> exact={exact} noisy={synapse.result}"
         )
         return synapse
 

@@ -15,30 +15,47 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from typing import Union
+from typing import Any, Union
+
+import bittensor as bt
 from bittensor import (
     Balance,
+    Keypair,
     NeuronInfo,
     AxonInfo,
     PrometheusInfo,
     __ss58_format__,
 )
-from bittensor.mock.wallet_mock import MockWallet as _MockWallet
-from bittensor.mock.wallet_mock import get_mock_coldkey as _get_mock_coldkey
-from bittensor.mock.wallet_mock import get_mock_hotkey as _get_mock_hotkey
-from bittensor.mock.wallet_mock import get_mock_keypair as _get_mock_keypair
-from bittensor.mock.wallet_mock import get_mock_wallet as _get_mock_wallet
 
 from rich.console import Console
 from rich.text import Text
 
 
-def __mock_wallet_factory__(*args, **kwargs) -> _MockWallet:
+def _get_mock_keypair(uid: int = 0) -> Keypair:
+    return bt.Keypair.create_from_uri(f"//mock-test-{uid}")
+
+
+def _get_mock_hotkey(uid: int) -> str:
+    return _get_mock_keypair(uid).ss58_address
+
+
+def _get_mock_coldkey(uid: int) -> str:
+    return _get_mock_keypair(uid + 100_000).ss58_address
+
+
+def _get_mock_wallet() -> Any:
+    class _W:
+        def __init__(self) -> None:
+            self.hotkey = _get_mock_keypair(0)
+            self.coldkey = _get_mock_keypair(1)
+
+    return _W()
+
+
+def __mock_wallet_factory__(*args, **kwargs) -> Any:
     """Returns a mock wallet object."""
 
-    mock_wallet = _get_mock_wallet()
-
-    return mock_wallet
+    return _get_mock_wallet()
 
 
 class CLOSE_IN_VALUE:

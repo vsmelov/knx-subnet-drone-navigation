@@ -26,7 +26,7 @@ from abc import ABC, abstractmethod
 from template.utils.config import check_config, add_args, config
 from template.utils.misc import ttl_get_block
 from template import __spec_version__ as spec_version
-from template.mock import MockSubtensor, MockMetagraph
+from template.mock import MockSubtensor, MockMetagraph, MockWallet
 
 
 class BaseNeuron(ABC):
@@ -80,7 +80,7 @@ class BaseNeuron(ABC):
 
         # The wallet holds the cryptographic key pairs for the miner.
         if self.config.mock:
-            self.wallet = bt.MockWallet(config=self.config)
+            self.wallet = MockWallet(config=self.config)
             self.subtensor = MockSubtensor(
                 self.config.netuid, wallet=self.wallet
             )
@@ -88,8 +88,14 @@ class BaseNeuron(ABC):
                 self.config.netuid, subtensor=self.subtensor
             )
         else:
-            self.wallet = bt.wallet(config=self.config)
-            self.subtensor = bt.subtensor(config=self.config)
+            self.wallet = bt.Wallet(config=self.config)
+            # SDK maps `--subtensor.network local` to ws://127.0.0.1:9944 inside the container, ignoring
+            # `--subtensor.chain_endpoint` for the live node. Passing the WS URL as `network=` fixes Docker localnet.
+            _ep = str(getattr(self.config.subtensor, "chain_endpoint", "") or "")
+            if _ep.startswith("ws://") or _ep.startswith("wss://"):
+                self.subtensor = bt.Subtensor(network=_ep, config=self.config)
+            else:
+                self.subtensor = bt.Subtensor(config=self.config)
             self.metagraph = self.subtensor.metagraph(self.config.netuid)
 
         bt.logging.info(f"Wallet: {self.wallet}")

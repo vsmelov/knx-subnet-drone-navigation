@@ -73,12 +73,12 @@ class TemplateValidatorNeuronTestCase(unittest.TestCase):
         )
 
         for response in responses:
-            self.assertEqual(response, expected)
+            self.assertLess(abs(float(response) - float(expected)), 0.11)
 
     def test_reward(self):
         step = self.neuron.step
         synapse = MathSynapse(operand_a=step, operand_b=2, op="*")
-        expected = step * 2
+        expected = float(step * 2)
 
         responses = self.neuron.dendrite.query(
             axons=[
@@ -89,13 +89,13 @@ class TemplateValidatorNeuronTestCase(unittest.TestCase):
         )
 
         rewards = get_rewards(self.neuron, expected=expected, responses=responses)
-        expected_rewards = np.array([1.0] * len(responses), dtype=np.float32)
-        np.testing.assert_array_equal(rewards, expected_rewards)
+        self.assertAlmostEqual(float(np.sum(rewards)), 1.0, places=5)
+        self.assertTrue(np.all(rewards >= 0))
 
     def test_reward_with_nan(self):
         step = self.neuron.step
         synapse = MathSynapse(operand_a=step, operand_b=2, op="*")
-        expected = step * 2
+        expected = float(step * 2)
 
         responses = self.neuron.dendrite.query(
             axons=[
@@ -105,8 +105,11 @@ class TemplateValidatorNeuronTestCase(unittest.TestCase):
             deserialize=True,
         )
 
-        rewards = get_rewards(self.neuron, expected=expected, responses=responses).copy()
-        expected_rewards = rewards.clone()
+        rewards = np.array(
+            get_rewards(self.neuron, expected=expected, responses=responses),
+            copy=True,
+        )
+        expected_rewards = rewards.copy()
         # Add NaN values to rewards
         rewards[0] = float("nan")
 

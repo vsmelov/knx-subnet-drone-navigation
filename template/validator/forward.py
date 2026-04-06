@@ -17,6 +17,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import json
 import operator
 import random
 import time
@@ -46,7 +47,7 @@ async def forward(self):
     op = random.choice(ALLOWED_OPS)
     a = random.randint(0, 99)
     b = random.randint(0, 99)
-    expected = int(_OPS[op](a, b))
+    expected = float(_OPS[op](a, b))
     synapse = MathSynapse(operand_a=a, operand_b=b, op=op)
 
     responses = await self.dendrite(
@@ -60,6 +61,19 @@ async def forward(self):
     )
 
     rewards = get_rewards(self, expected=expected, responses=responses)
+
+    scoreboard = {
+        "expected": expected,
+        "op": op,
+        "a": a,
+        "b": b,
+        "uids": [int(u) for u in miner_uids],
+        "responses": [
+            float(r) if r is not None else None for r in responses
+        ],
+        "rewards": [float(x) for x in rewards.tolist()],
+    }
+    bt.logging.info("MATH_SCOREBOARD " + json.dumps(scoreboard))
 
     bt.logging.info(f"Scored responses: {rewards}")
     # Update the scores based on the rewards. You may want to define your own update_scores function for custom behavior.

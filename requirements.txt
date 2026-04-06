@@ -1,10 +1,13 @@
-# Must stay aligned with btcli / docs: same major as your Subtensor stack (RPC + metadata).
-# Upstream template: https://github.com/opentensor/subnet-template/blob/main/requirements.txt
-bittensor>=10.0.1
-starlette>=0.30.0
-pydantic>=2
-rich>=13
-pytest>=8
-torch>=2
-numpy>=1
-setuptools>=68
+# Runtime: miner / validator. Numpy comes in as a dependency of bittensor; the template still
+# imports numpy for score/weight vectors (validator stack), not for arithmetic parsing.
+#
+# SDK 9.7.x — aligned with corporate subtensor fork era (v9.7.1 was not published on public PyPI;
+# use 9.7.0 here, or `pip install` from your fork / private index if you ship 9.7.1).
+#
+# Dev/tests: pip install -r requirements-dev.txt
+bittensor[cli]==9.7.0
+# Pin CLI to the same minor as the SDK; bittensor[cli] only requires bittensor-cli>=9.0.2 and would otherwise float to latest.
+bittensor-cli==9.7.0
+# Pin: bittensor 9.7.x calls get_encrypted_commit without `hotkey`; newer bittensor-drand (1.x)
+# requires hotkey and breaks set_weights / commit-reveal. Match upstream SDK’s paired version.
+bittensor-drand==0.5.0

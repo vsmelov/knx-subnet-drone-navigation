@@ -1,0 +1,4 @@
+# Dev: lint + typecheck (SDK pinned in requirements.txt, currently 9.7.x)
+-r requirements.txt
+ruff>=0.8.0
+pyright>=1.1.390
