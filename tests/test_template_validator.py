@@ -20,11 +20,11 @@ import sys
 import unittest
 
 import bittensor as bt
-import torch
+import numpy as np
 
 from neurons.validator import Validator
 from template.base.validator import BaseValidatorNeuron
-from template.protocol import Dummy
+from template.protocol import MathSynapse
 from template.utils.uids import get_random_uids
 from template.validator.reward import get_rewards
 
@@ -60,50 +60,52 @@ class TemplateValidatorNeuronTestCase(unittest.TestCase):
         pass
 
     def test_dummy_responses(self):
-        # TODO: Test that the dummy responses are correctly constructed
+        step = self.neuron.step
+        synapse = MathSynapse(operand_a=step, operand_b=2, op="*")
+        expected = step * 2
 
         responses = self.neuron.dendrite.query(
-            # Send the query to miners in the network.
             axons=[
                 self.neuron.metagraph.axons[uid] for uid in self.miner_uids
             ],
-            # Construct a dummy query.
-            synapse=Dummy(dummy_input=self.neuron.step),
-            # All responses have the deserialize function called on them before returning.
+            synapse=synapse,
             deserialize=True,
         )
 
-        for i, response in enumerate(responses):
-            self.assertEqual(response, self.neuron.step * 2)
+        for response in responses:
+            self.assertEqual(response, expected)
 
     def test_reward(self):
-        # TODO: Test that the reward function returns the correct value
-        responses = self.dendrite.query(
-            # Send the query to miners in the network.
-            axons=[self.metagraph.axons[uid] for uid in self.miner_uids],
-            # Construct a dummy query.
-            synapse=Dummy(dummy_input=self.neuron.step),
-            # All responses have the deserialize function called on them before returning.
+        step = self.neuron.step
+        synapse = MathSynapse(operand_a=step, operand_b=2, op="*")
+        expected = step * 2
+
+        responses = self.neuron.dendrite.query(
+            axons=[
+                self.neuron.metagraph.axons[uid] for uid in self.miner_uids
+            ],
+            synapse=synapse,
             deserialize=True,
         )
 
-        rewards = get_rewards(self.neuron, responses)
-        expected_rewards = torch.FloatTensor([1.0] * len(responses))
-        self.assertEqual(rewards, expected_rewards)
+        rewards = get_rewards(self.neuron, expected=expected, responses=responses)
+        expected_rewards = np.array([1.0] * len(responses), dtype=np.float32)
+        np.testing.assert_array_equal(rewards, expected_rewards)
 
     def test_reward_with_nan(self):
-        # TODO: Test that NaN rewards are correctly sanitized
-        # TODO: Test that a bt.logging.warning is thrown when a NaN reward is sanitized
-        responses = self.dendrite.query(
-            # Send the query to miners in the network.
-            axons=[self.metagraph.axons[uid] for uid in self.miner_uids],
-            # Construct a dummy query.
-            synapse=Dummy(dummy_input=self.neuron.step),
-            # All responses have the deserialize function called on them before returning.
+        step = self.neuron.step
+        synapse = MathSynapse(operand_a=step, operand_b=2, op="*")
+        expected = step * 2
+
+        responses = self.neuron.dendrite.query(
+            axons=[
+                self.neuron.metagraph.axons[uid] for uid in self.miner_uids
+            ],
+            synapse=synapse,
             deserialize=True,
         )
 
-        rewards = get_rewards(self.neuron, responses)
+        rewards = get_rewards(self.neuron, expected=expected, responses=responses).copy()
         expected_rewards = rewards.clone()
         # Add NaN values to rewards
         rewards[0] = float("nan")

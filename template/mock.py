@@ -1,3 +1,4 @@
+import operator
 import time
 
 import asyncio
@@ -5,6 +6,10 @@ import random
 import bittensor as bt
 
 from typing import List
+
+from template.protocol import ALLOWED_OPS
+
+_OPS = {"+": operator.add, "-": operator.sub, "*": operator.mul}
 
 
 class MockSubtensor(bt.MockSubtensor):
@@ -85,14 +90,19 @@ class MockDendrite(bt.dendrite):
                 process_time = random.random()
                 if process_time < timeout:
                     s.dendrite.process_time = str(time.time() - start_time)
-                    # Update the status code and status message of the dendrite to match the axon
                     # TODO (developer): replace with your own expected synapse data
-                    s.dummy_output = s.dummy_input * 2
+                    op = (s.op or "").strip()
+                    if op in ALLOWED_OPS:
+                        s.result = int(
+                            _OPS[op](int(s.operand_a), int(s.operand_b))
+                        )
+                    else:
+                        s.result = None
                     s.dendrite.status_code = 200
                     s.dendrite.status_message = "OK"
                     synapse.dendrite.process_time = str(process_time)
                 else:
-                    s.dummy_output = 0
+                    s.result = int(s.operand_a)
                     s.dendrite.status_code = 408
                     s.dendrite.status_message = "Timeout"
                     synapse.dendrite.process_time = str(timeout)
