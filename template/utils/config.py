@@ -233,6 +233,17 @@ def add_validator_args(cls, parser):
     )
 
     parser.add_argument(
+        "--neuron.validator_axon_ports",
+        type=str,
+        help=(
+            "Comma-separated axon ports never treated as miners (Docker: validator 9101/9102). "
+            "When non-empty, only serving UIDs whose axon port is not in this set are sampled. "
+            "Empty string restores classic vpermit_tao_limit-only filtering."
+        ),
+        default="9101,9102",
+    )
+
+    parser.add_argument(
         "--wandb.project_name",
         type=str,
         help="The name of the project where you are sending the new run.",
