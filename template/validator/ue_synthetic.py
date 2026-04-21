@@ -96,9 +96,10 @@ def _connect_client() -> Any:
 def _capture_lit_jpeg_b64(client: Any) -> str:
     import cv2
 
+    # City Sample + this UnrealCV build: lit works on /camera/0; /camera/1 returns "Invalid sensor id".
     last_err: str | None = None
     data: bytes | None = None
-    for cam in ("1", "0"):
+    for cam in ("0", "1"):
         raw = client.request(f"vget /camera/{cam}/lit png")
         if not raw:
             last_err = f"empty vget /camera/{cam}/lit png"
