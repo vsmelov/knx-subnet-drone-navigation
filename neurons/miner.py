@@ -17,13 +17,16 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import base64
 import json
 import os
 import random
+import sys
 import time
 import typing
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import bittensor as bt
 
@@ -57,9 +60,14 @@ def _resolve_miner_model_mode() -> str:
 
 class Miner(BaseMinerNeuron):
     """
-    Your miner neuron class. You should use this class to define your miner's behavior. In particular, you should replace the forward function with your own logic. You may also want to override the blacklist and priority functions according to your needs.
+    Policy backends (``OPENFLY_SUBNET_MINER_MODEL``):
 
-    This class inherits from the BaseMinerNeuron class, which in turn inherits from BaseNeuron. The BaseNeuron class takes care of routine tasks such as setting up wallet, subtensor, metagraph, logging directory, parsing config, etc. You can override any of the methods in BaseNeuron if you need to customize the behavior.
+    - ``openai`` — Chat Completions in-process (urllib), no PyTorch.
+    - ``openfly`` — local HuggingFace VLM using ``OpenFly-Platform/train/eval.py:get_action`` (same stack
+      as the parent repo ``docker/openfly-dashboard`` image). Requires the **CUDA miner** Dockerfile
+      (``docker/subnet-miner/Dockerfile``), GPU, and ``OPENFLY_MODEL`` weights mounted at runtime.
+
+    This class inherits from BaseMinerNeuron → BaseNeuron (wallet, subtensor, metagraph, config).
 
     This class provides reasonable default behavior for a miner such as blacklisting unrecognized hotkeys, prioritizing requests based on stake, and forwarding requests to the forward function. If you need to define custom
     """
@@ -68,8 +76,13 @@ class Miner(BaseMinerNeuron):
         super(Miner, self).__init__(config=config)
 
         self._policy_backend = _resolve_miner_model_mode()
-        self._warned_openfly_no_url = False
+        self._openfly_policy = None
+        self._openfly_processor = None
+        self._openfly_get_action = None
+        self._openfly_load_error: str | None = None
         bt.logging.info(f"OPENFLY_SUBNET_MINER_MODEL -> policy backend: {self._policy_backend}")
+        if self._policy_backend == "openfly":
+            self._ensure_openfly_local_model()
 
     def _openai_key(self) -> str:
         return os.environ.get("OPENAI_API_TOKEN", "").strip()
@@ -215,74 +228,119 @@ class Miner(BaseMinerNeuron):
             "explain": explain_out,
         }
 
-    def _openfly_policy_url(self) -> str:
-        return os.environ.get("OPENFLY_SUBNET_MINER_OPENFLY_URL", "").strip()
+    def _openfly_train_dir(self) -> Path:
+        return Path(__file__).resolve().parents[1] / "OpenFly-Platform" / "train"
 
-    def _call_openfly_http_candidate(
+    def _ensure_openfly_local_model(self) -> bool:
+        if self._openfly_load_error is not None:
+            return False
+        if self._openfly_policy is not None and self._openfly_processor is not None:
+            return True
+        train = self._openfly_train_dir()
+        if not train.is_dir():
+            self._openfly_load_error = f"missing OpenFly train dir: {train}"
+            bt.logging.error(self._openfly_load_error)
+            return False
+        try:
+            import numpy as np
+            import torch
+            from transformers import AutoModelForVision2Seq, AutoProcessor
+
+            if str(train) not in sys.path:
+                sys.path.insert(0, str(train))
+            from eval import get_action  # type: ignore  # noqa: E402
+
+            model_id = os.environ.get("OPENFLY_MODEL", "IPEC-COMMUNITY/openfly-agent-7b").strip()
+            hf_tok = os.environ.get("HF_TOKEN", "").strip() or None
+            attn = os.environ.get("OPENFLY_ATTN_IMPLEMENTATION", "eager").strip()
+            load_kw: dict[str, typing.Any] = dict(
+                torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True
+            )
+            if hf_tok:
+                load_kw["token"] = hf_tok
+            bt.logging.info(f"openfly: loading VLM from {model_id!r} …")
+            processor = AutoProcessor.from_pretrained(
+                model_id, trust_remote_code=True, token=hf_tok
+            )
+            try:
+                policy = AutoModelForVision2Seq.from_pretrained(
+                    model_id, attn_implementation=attn, **load_kw
+                )
+            except Exception as e:
+                bt.logging.warning(f"openfly: retry AutoModel with eager attn ({e!r})")
+                policy = AutoModelForVision2Seq.from_pretrained(
+                    model_id, attn_implementation="eager", **load_kw
+                )
+            policy = policy.to("cuda:0")
+            self._openfly_processor = processor
+            self._openfly_policy = policy
+            self._openfly_get_action = get_action
+            bt.logging.info("openfly: VLM loaded on cuda:0")
+            _ = np  # noqa: F841 — keep import used for type/runtime consistency
+            return True
+        except Exception as e:
+            self._openfly_load_error = f"{type(e).__name__}: {e}"
+            bt.logging.error(f"openfly: failed to load VLM: {self._openfly_load_error}")
+            return False
+
+    def _decode_frame_or_blank(self, frame_jpeg_b64: str | None) -> typing.Any:
+        import numpy as np
+        import cv2
+
+        if frame_jpeg_b64:
+            try:
+                raw = base64.standard_b64decode(frame_jpeg_b64)
+                arr = np.frombuffer(raw, dtype=np.uint8)
+                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                if img is not None:
+                    return img
+            except (ValueError, OSError, TypeError) as e:
+                bt.logging.warning(f"openfly: bad frame_jpeg_b64 ({type(e).__name__}), using blank frame")
+        return np.zeros((480, 640, 3), dtype=np.uint8)
+
+    def _call_openfly_local_candidate(
         self,
         *,
         instruction: str,
-        synthetic_context_json: str | None,
         frame_jpeg_b64: str | None,
     ) -> dict[str, typing.Any]:
         ins = normalize_user_instruction(instruction)
-        url = self._openfly_policy_url()
-        if not url:
-            if not self._warned_openfly_no_url:
-                bt.logging.warning(
-                    "OPENFLY_SUBNET_MINER_MODEL=openfly but OPENFLY_SUBNET_MINER_OPENFLY_URL is empty; "
-                    "using heuristic until a URL is set"
+        if not self._ensure_openfly_local_model():
+            return self._rule_based_candidate(ins, tag=f"openfly:{self._openfly_load_error or 'load_failed'}")
+        assert self._openfly_policy is not None
+        assert self._openfly_processor is not None
+        assert self._openfly_get_action is not None
+        bgr = self._decode_frame_or_blank(frame_jpeg_b64)
+        try:
+            aid_raw = int(
+                self._openfly_get_action(
+                    self._openfly_policy,
+                    self._openfly_processor,
+                    [bgr],
+                    ins,
+                    [],
+                    if_his=True,
+                    his_step=2,
                 )
-                self._warned_openfly_no_url = True
-            return self._rule_based_candidate(ins, tag="openfly:no_url")
-        timeout_s = max(5, _env_int("OPENFLY_SUBNET_MINER_OPENFLY_TIMEOUT", 120))
-        body = {
-            "instruction": ins,
-            "synthetic_context_json": synthetic_context_json or "",
-            "frame_jpeg_b64": frame_jpeg_b64 or "",
-        }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=float(timeout_s)) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, ValueError) as e:
-            bt.logging.warning(f"openfly HTTP miner candidate failed: {type(e).__name__}: {e}")
-            return self._rule_based_candidate(ins, tag="openfly:http_error")
-        if isinstance(payload, dict) and isinstance(payload.get("result"), dict):
-            payload = payload["result"]
-        aid_raw = payload.get("action_id", self._expected_action_heuristic(ins))
-        try:
-            aid = canonicalize_exit_action_id(int(aid_raw))
-        except (TypeError, ValueError):
-            aid = self._expected_action_heuristic(ins)
+            )
+        except Exception as e:
+            bt.logging.warning(f"openfly get_action failed: {type(e).__name__}: {e}")
+            return self._rule_based_candidate(ins, tag="openfly:get_action_error")
+        aid = canonicalize_exit_action_id(aid_raw)
         if aid not in ALLOWED_ACTION_IDS:
             aid = self._expected_action_heuristic(ins)
-        conf_raw = payload.get("confidence", 0.75)
-        try:
-            conf = max(0.0, min(1.0, float(conf_raw)))
-        except (TypeError, ValueError):
-            conf = 0.75
-        exp = str(payload.get("explain", "") or "").strip()[:500]
         lab = ACTION_LABELS.get(aid, f"unknown_{aid}")
-        if exp:
-            explain_out = exp
-        else:
-            explain_out = structured_explain_discrete(
-                backend="openfly",
-                instruction=ins,
-                action_id=aid,
-                label_semantic=lab,
-                note="http model returned empty explain",
-            )
+        explain_out = structured_explain_discrete(
+            backend="openfly",
+            instruction=ins,
+            action_id=aid,
+            label_semantic=lab,
+            note="local VLM",
+        )
         return {
             "action_id": aid,
             "label": lab,
-            "confidence": conf,
+            "confidence": 0.82,
             "explain": explain_out,
         }
 
@@ -321,9 +379,9 @@ class Miner(BaseMinerNeuron):
         synthetic_context_json: str | None,
         frame_jpeg_b64: str | None,
     ) -> dict[str, typing.Any]:
-        cand = self._call_openfly_http_candidate(
+        _ = synthetic_context_json
+        cand = self._call_openfly_local_candidate(
             instruction=instruction,
-            synthetic_context_json=synthetic_context_json,
             frame_jpeg_b64=frame_jpeg_b64,
         )
         return {

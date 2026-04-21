@@ -1,0 +1,9 @@
+# Full stack (assets-init + openfly-ue + subnet-validator + subnet-miner).
+# One command, one project — no "orphan containers" when mixing separate compose files.
+#
+#   docker compose up -d --build
+#
+# Partial runs: `docker compose -f docker-compose.validator.yml …` or `-f docker-compose.miner.yml …`
+include:
+  - path: docker-compose.validator.yml
+  - path: docker-compose.miner.yml

@@ -9,6 +9,9 @@ services:
         required: false
     environment:
       OPENFLY_ASSET_AUTO_DOWNLOAD: "${OPENFLY_ASSET_AUTO_DOWNLOAD:-1}"
+      # Match openfly-ue user: so sed -i on unrealcv.ini works on the bind mount.
+      OPENFLY_ASSET_OWNER_UID: "${OPENFLY_DOCKER_UID:-1000}"
+      OPENFLY_ASSET_OWNER_GID: "${OPENFLY_DOCKER_GID:-1000}"
       OPENFLY_MODEL_DIR: /workspace/models/openfly-agent-7b
       OPENFLY_MODEL_REPO: "${OPENFLY_MODEL_REPO:-IPEC-COMMUNITY/openfly-agent-7b}"
       OPENFLY_UE_DIR: /workspace/OpenFly-Platform/envs/ue/env_ue_smallcity
@@ -36,6 +39,7 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: all
       OPENFLY_PLATFORM_ROOT: /app/OpenFly-Platform
+      # Port UnrealCV listens on *inside* the UE container (unrealcv.ini + TCP + shared UDS name).
       OPENFLY_UNREALCV_PORT: "${OPENFLY_UNREALCV_PORT:-9030}"
       OPENFLY_UE_LOGFILE: /app/logs/ue/citysample_stdout.log
     volumes:
@@ -43,7 +47,7 @@ services:
       - ./logs/openfly-compose-tmp:/tmp:rw
       - ./logs/ue-dashboard:/app/logs/ue:rw
     ports:
-      - "${OPENFLY_UNREALCV_PORT:-9030}:9030"
+      # Publish validator axon only. UnrealCV stays internal to UE+validator shared network namespace.
       - "${VALIDATOR_AXON_PORT:-9101}:${VALIDATOR_AXON_PORT:-9101}"
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 ${OPENFLY_UNREALCV_PORT:-9030}"]

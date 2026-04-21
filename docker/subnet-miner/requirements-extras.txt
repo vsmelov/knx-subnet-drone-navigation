@@ -1,0 +1,15 @@
+# Same stack as parent repo docker/openfly-dashboard/requirements-extras.txt:
+# torch + transformers + deps for OpenFly-Platform/train/eval.py (get_action / VLM).
+#
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch>=2.3.0,<2.8
+torchvision>=0.18.0
+transformers==4.48.1
+tokenizers==0.21.1
+accelerate>=0.33.0
+safetensors>=0.4.0
+timm>=0.9.16,<1.0
+Pillow>=10.0.0
+scikit-learn>=1.3.0
+packaging
+ninja

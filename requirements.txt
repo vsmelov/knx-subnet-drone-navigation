@@ -1,5 +1,19 @@
-# Runtime: miner / validator. Numpy comes in as a dependency of bittensor; the template still
-# imports numpy for score/weight vectors (validator stack), not for arithmetic parsing.
+# Runtime: **bittensor neuron code** (`pip install -r requirements.txt` + `pip install -e .`).
+# - **Validator** image: root `Dockerfile` (python slim) — only these lines + `numpy` via bittensor.
+# - **Miner** image: `docker/subnet-miner/Dockerfile` (CUDA) also runs this file, then installs
+#   OpenFly / torch / transformers in separate Dockerfile RUN steps (same pattern as parent
+#   `docker/openfly-dashboard/Dockerfile`).
+#
+# Neuron code is Bittensor + stdlib + `template/` (urllib JSON miner, dendrite/weights). The
+# OpenFly VLM imports happen **only** when `OPENFLY_SUBNET_MINER_MODEL=openfly` in `neurons/miner.py`.
+#
+# Other compose services **do not use this file**:
+# - `docker/openfly-ue/Dockerfile` — UE + Xvfb (CUDA runtime image, no subnet Python deps).
+# - `docker/assets-init/Dockerfile` — only `huggingface_hub` for downloads.
+#
+# Do **not** paste all of `OpenFly-Platform/requirements.txt` into this file: the CUDA **miner**
+# Dockerfile installs that list in its own `RUN pip …` layer (mirroring the main repo dashboard image).
+# This `requirements.txt` stays the small bittensor pin set shared with the slim validator image.
 #
 # SDK 9.7.x — aligned with corporate subtensor fork era (v9.7.1 was not published on public PyPI;
 # use 9.7.0 here, or `pip install` from your fork / private index if you ship 9.7.1).

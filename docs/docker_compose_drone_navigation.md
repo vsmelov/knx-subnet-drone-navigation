@@ -21,6 +21,8 @@ git submodule update --init --recursive
 
 Bittensor keys live in **`./wallets/`** (gitignored); compose mounts that tree to `/root/.bittensor/wallets`. Populate it with `export BT_WALLET_PATH="$PWD/wallets"` and `btcli wallet …`, or copy from an existing `~/.bittensor/wallets` layout.
 
+UnrealCV: **`OPENFLY_UNREALCV_PORT`** is internal to the UE/validator shared network namespace. In this subnet compose we do not publish UnrealCV to host; only validator axon is exposed.
+
 Asset bootstrap is now built into `docker-compose.validator.yml` via `assets-init` service:
 
 - Model weights are downloaded to `./models/openfly-agent-7b` (default HF repo `IPEC-COMMUNITY/openfly-agent-7b`).
@@ -33,6 +35,8 @@ You can disable auto-download with `OPENFLY_ASSET_AUTO_DOWNLOAD=0` and manage as
 does not race model/env bootstrap.
 
 ## 2) Start miner
+
+The miner image is **CUDA + OpenFly train deps** (`docker/subnet-miner/Dockerfile`). You need **NVIDIA Container Toolkit**, `./OpenFly-Platform` (submodule), and `./models/openfly-agent-7b` (or set `OPENFLY_MODEL` to an HF id). HF cache dirs under `./logs/miner-*-cache` are optional but recommended (see `docker-compose.miner.yml`).
 
 ```bash
 docker compose -f docker-compose.miner.yml up -d --build

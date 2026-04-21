@@ -12,12 +12,16 @@ if [[ ! -d "$UE_DIR" ]]; then
   exit 1
 fi
 
+# Avoid sed -i temp files next to CitySample (bind-mount perms / ro dirs); write via /tmp.
 if [[ -f "$INI" ]]; then
+  _ini_tmp="$(mktemp /tmp/openfly-ue-unrealcv-ini.XXXXXX)"
   if grep -qE '^[Pp][Oo][Rr][Tt]=' "$INI"; then
-    sed -i "s/^[Pp][Oo][Rr][Tt]=.*/Port=${PORT}/" "$INI"
+    sed "s/^[Pp][Oo][Rr][Tt]=.*/Port=${PORT}/" "$INI" >"$_ini_tmp"
   else
-    printf '\nPort=%s\n' "${PORT}" >>"$INI"
+    { cat "$INI"; printf '\nPort=%s\n' "${PORT}"; } >"$_ini_tmp"
   fi
+  cat "$_ini_tmp" >"$INI"
+  rm -f "$_ini_tmp"
 fi
 
 export DISPLAY="${OPENFLY_UE_XVFB_DISPLAY:-:99}"

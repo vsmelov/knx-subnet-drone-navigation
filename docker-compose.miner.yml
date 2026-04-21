@@ -2,9 +2,10 @@ services:
   subnet-miner:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/subnet-miner/Dockerfile
     image: xsubnet-drone-miner:local
     restart: unless-stopped
+    gpus: all
     env_file:
       - path: .env
         required: false
@@ -14,8 +15,13 @@ services:
       WALLET_NAME: "${MINER_WALLET_NAME:-miner}"
       WALLET_HOTKEY: "${MINER_WALLET_HOTKEY:-default}"
       MINER_AXON_PORT: "${MINER_AXON_PORT:-8091}"
+      OPENFLY_MODEL: "${OPENFLY_MODEL:-/app/models/openfly-agent-7b}"
+      OPENFLY_ATTN_IMPLEMENTATION: "${OPENFLY_ATTN_IMPLEMENTATION:-eager}"
+      HF_TOKEN: "${HF_TOKEN:-}"
+      HF_HOME: "${HF_HOME:-/app/.cache/huggingface}"
+      TORCH_HOME: "${TORCH_HOME:-/app/.cache/torch}"
     command:
-      - python
+      - python3
       - neurons/miner.py
       - --netuid
       - ${NETUID:-1}
@@ -33,3 +39,7 @@ services:
     volumes:
       - ./logs:/app/logs:rw
       - ./wallets:/root/.bittensor/wallets:rw
+      - ./OpenFly-Platform:/app/OpenFly-Platform:ro
+      - ./models:/app/models:ro
+      - ./logs/miner-hf-cache:/app/.cache/huggingface:rw
+      - ./logs/miner-torch-cache:/app/.cache/torch:rw

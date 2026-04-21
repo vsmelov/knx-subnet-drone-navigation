@@ -6,6 +6,8 @@ Konnex drone-navigation runtime package with:
 - UnrealEngine sidecar (`openfly-ue`)
 - one-shot assets bootstrap (`assets-init`)
 
+**Default:** root **`docker-compose.yml`** includes validator + miner stacks so **`docker compose up -d --build`** starts everything in one project (no orphan containers). Split files **`docker-compose.validator.yml`** / **`docker-compose.miner.yml`** stay for partial runs.
+
 ## Environment (set this first)
 
 Create `.env` from the template (this file is **only for this repo**; it does not replace `.env` in the parent `drone-navigation` tree):
@@ -37,55 +39,59 @@ For **host-run** `python neurons/…` or **`offchain_validator_smoke.py`**, set 
 
 **Security (same as any bind mount):** keys under `./wallets` are visible to any code in the container with that mount; treat `./wallets` like a **secret directory** on disk. For **mainnet / serious stake**, prefer a **hotkey-only** host, **coldkey offline**, separate keys for labs vs production, trusted images, and optionally a **read-only** mount (`:ro`) in a compose override if signing still works.
 
+**UnrealCV / UE port:** `OPENFLY_UNREALCV_PORT` is the port **inside** the UE container (`unrealcv.ini`, TCP, `/tmp/unrealcv_<port>.socket`). The validator shares that network namespace and connects to `127.0.0.1` on that same port. UnrealCV is **not** published to host in this subnet compose (internal only).
+
 **HF / assets (when you use auto-download):**
 - `HF_TOKEN` — **required** if Hugging Face assets are gated (UE zip / weights). Same role as `HUGGINGFACE_HUB_TOKEN`.
 - `OPENFLY_ASSET_AUTO_DOWNLOAD` — `1` (default): `assets-init` downloads model + UE before UE starts; `0`: you place `models/` and `OpenFly-Platform/envs/ue/...` yourself.
 - `OPENFLY_UE_ARCHIVE_URL` — optional; if set, UE is taken from this URL instead of the HF dataset.
 - `OPENFLY_UE_DATASET_REPO`, `OPENFLY_UE_DATASET_SUBDIR` — only matter when `OPENFLY_UE_ARCHIVE_URL` is empty; defaults match OpenFly_DataGen layout.
+- `OPENFLY_DOCKER_UID` / `OPENFLY_DOCKER_GID` — user inside `openfly-ue`; `assets-init` `chown`s the UE tree to this uid/gid on the bind mount so UnrealCV ini edits work (repeat runs skip `chown` if ownership already matches).
 
 **Miner policy (`neurons/miner.py`):**
 - `OPENFLY_SUBNET_MINER_MODEL` — `openai` (default) or `openfly`.
   - **`openai`** — three sampled Chat Completions “competition” winners (same temperatures as before). Set **`OPENAI_API_TOKEN`** in `.env`. Without it the miner falls back to a small heuristic.
-  - **`openfly`** — one call to your **OpenFly / VLM HTTP service** (the slim miner image has no PyTorch). Set `OPENFLY_SUBNET_MINER_OPENFLY_URL` to a POST endpoint. JSON body: `instruction`, `synthetic_context_json`, `frame_jpeg_b64` (strings; empty string if absent). JSON response: `action_id` (int), optional `confidence`, `explain`; you may wrap the object in `{ "result": { ... } }`. Optional: `OPENFLY_SUBNET_MINER_OPENFLY_TIMEOUT` (seconds, default 120). If the URL is empty, the miner uses the same heuristic as a stub until you configure the sidecar.
+  - **`openfly`** — loads the **OpenFly HF VLM inside the miner process** (same dependency pattern as the parent repo `docker/openfly-dashboard/Dockerfile`: CUDA base + `OpenFly-Platform/requirements.txt` + torch/transformers extras). Uses `OpenFly-Platform/train/eval.py:get_action`. Compose **`subnet-miner`** (see `docker-compose.miner.yml` / root `docker-compose.yml`) builds **`docker/subnet-miner/Dockerfile`**, requests a **GPU**, and bind-mounts **`./OpenFly-Platform`** and **`./models`**. Set **`OPENFLY_MODEL`** to a HF id or `/app/models/...` path; optional **`OPENFLY_ATTN_IMPLEMENTATION`**, **`HF_TOKEN`** for gated weights. Validator image stays slim (`Dockerfile`); only the miner stack carries PyTorch.
 - When `OPENFLY_SUBNET_MINER_MODEL=openai`: optional `OPENAI_API_BASE`, `OPENFLY_SUBNET_MINER_OPENAI_MODEL` / `OPENAI_GPT_POLICY_MODEL`.
 
-**Validator note:** the stock validator `forward` in this template does **not** call OpenAI or the OpenFly HTTP policy; only the miner does today.
+**Validator note:** the stock validator `forward` in this template does **not** call OpenAI or load the OpenFly VLM; only the miner does today.
 
 ## Quick Start
 
 ```bash
 cd xsubnet-template
-mkdir -p wallets logs/openfly-compose-tmp logs/ue-dashboard logs
+mkdir -p wallets logs/openfly-compose-tmp logs/ue-dashboard logs logs/miner-hf-cache logs/miner-torch-cache
 chmod 1777 logs/openfly-compose-tmp
 git submodule update --init --recursive
 ```
 
-Start miner:
+**Full stack (recommended):**
 
 ```bash
-docker compose -f docker-compose.miner.yml up -d --build
+docker compose up -d --build
 ```
 
-Start validator + UE:
+**Partial:** validator + UE only, or miner only:
 
 ```bash
 docker compose -f docker-compose.validator.yml up -d --build
+docker compose -f docker-compose.miner.yml up -d --build
 ```
 
 Check status:
 
 ```bash
-docker compose -f docker-compose.validator.yml logs assets-init --tail 120
-docker compose -f docker-compose.validator.yml logs openfly-ue --tail 120
-docker compose -f docker-compose.validator.yml logs subnet-validator --tail 120
-docker compose -f docker-compose.miner.yml logs subnet-miner --tail 120
+docker compose logs assets-init --tail 120
+docker compose logs openfly-ue --tail 120
+docker compose logs subnet-validator --tail 120
+docker compose logs subnet-miner --tail 120
 ```
 
 ## Offchain smoke (validator → miners, no weights)
 
 This is **not** a separate chain mode: the script uses your **normal** subtensor RPC and metagraph, sends the same kind of `DroneNavSynapse` a validator would send, and prints rewards — **without** `set_weights` or running the full validator neuron.
 
-**Prerequisites:** subtensor reachable; **miner** registered on `NETUID`, axon serving (e.g. `docker compose -f docker-compose.miner.yml`); **validator** cold/hotkey exists on disk (`--wallet-name` / `--wallet-hotkey` are those **names**, same as in `.env`). Miner UID(s) must exist on the metagraph (`btcli subnet list` / wallet overview).
+**Prerequisites:** subtensor reachable; **miner** registered on `NETUID`, axon serving (e.g. `docker compose up -d` or miner-only compose file); **validator** cold/hotkey exists on disk (`--wallet-name` / `--wallet-hotkey` are those **names**, same as in `.env`). Miner UID(s) must exist on the metagraph (`btcli subnet list` / wallet overview).
 
 From the repo host (needs local `bittensor` + this package on `PYTHONPATH`; or run inside a dev container with the same deps):
 
@@ -102,11 +108,25 @@ Useful flags: `--rounds`, `--sleep`, `--instruction "..."`, `--tag-offchain` (ma
 
 ## Onchain Runtime
 
-After wallet/hotkey registration on your target network:
+**Subnet registration (once per coldkey/hotkey + `NETUID`):** costs **recycle burn** on that coldkey; needs enough **TAO** balance. Use the same `NETUID` and `SUBTENSOR_CHAIN_ENDPOINT` as in `.env`, and the same wallet **names** as `MINER_WALLET_*` / `VALIDATOR_WALLET_*`.
 
 ```bash
-docker compose -f docker-compose.miner.yml up -d --build
-docker compose -f docker-compose.validator.yml up -d --build
+cd xsubnet-template
+# export NETUID=… SUBTENSOR_CHAIN_ENDPOINT=… MINER_WALLET_NAME=… MINER_WALLET_HOTKEY=… VALIDATOR_WALLET_NAME=… VALIDATOR_WALLET_HOTKEY=…
+docker run --rm -v "$(pwd)/wallets:/root/.bittensor/wallets:rw" xsubnet-drone-validator:local \
+  btcli subnet register --wallet-name "$MINER_WALLET_NAME" --hotkey "$MINER_WALLET_HOTKEY" \
+  --netuid "$NETUID" --network "$SUBTENSOR_CHAIN_ENDPOINT" --no-prompt -y
+docker run --rm -v "$(pwd)/wallets:/root/.bittensor/wallets:rw" xsubnet-drone-validator:local \
+  btcli subnet register --wallet-name "$VALIDATOR_WALLET_NAME" --hotkey "$VALIDATOR_WALLET_HOTKEY" \
+  --netuid "$NETUID" --network "$SUBTENSOR_CHAIN_ENDPOINT" --no-prompt -y
+```
+
+Host `btcli` instead of Docker: `export BT_WALLET_PATH="$(pwd)/wallets"` and run the same `btcli subnet register …` lines (no `docker run` wrapper).
+
+After registration:
+
+```bash
+docker compose up -d --build
 ```
 
 ## Reset OpenFly Submodule

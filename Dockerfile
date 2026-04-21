@@ -1,3 +1,5 @@
+# Validator (and optional CPU-only tooling): slim image with bittensor only.
+# **Miner** compose uses `docker/subnet-miner/Dockerfile` (CUDA + OpenFly VLM deps).
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -12,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "neurons/miner.py", "--help"]
+CMD ["python", "neurons/validator.py", "--help"]

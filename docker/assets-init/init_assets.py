@@ -28,6 +28,61 @@ def _log(msg: str) -> None:
     print(f"[assets-init] {msg}", flush=True)
 
 
+def _parse_asset_owner_uid_gid() -> tuple[int | None, int | None]:
+    raw_u = (os.environ.get("OPENFLY_ASSET_OWNER_UID") or "").strip()
+    raw_g = (os.environ.get("OPENFLY_ASSET_OWNER_GID") or "").strip()
+    if not raw_u or not raw_g:
+        return None, None
+    try:
+        return int(raw_u), int(raw_g)
+    except ValueError:
+        _log(f"warn: invalid OPENFLY_ASSET_OWNER_UID/GID: {raw_u!r} / {raw_g!r}")
+        return None, None
+
+
+def _ue_tree_owned_by(ue_dir: Path, uid: int, gid: int) -> bool:
+    """Fast path for repeat `docker compose up` (skip huge recursive chown)."""
+    probe = ue_dir / "City_UE52/Binaries/Linux/unrealcv.ini"
+    if not probe.is_file():
+        probe = ue_dir / "CitySample.sh"
+    if not probe.is_file():
+        return False
+    st = probe.stat()
+    return st.st_uid == uid and st.st_gid == gid
+
+
+def _maybe_chown_ue_for_openfly(ue_dir: Path) -> None:
+    owner_u, owner_g = _parse_asset_owner_uid_gid()
+    if owner_u is None or owner_g is None:
+        return
+    if _ue_tree_owned_by(ue_dir, owner_u, owner_g):
+        _log(f"UE bind-mount ownership ok ({owner_u}:{owner_g}), skip chown")
+        return
+    _log(f"chown UE tree to {owner_u}:{owner_g} for openfly-ue bind mount")
+    _chown_tree(ue_dir, owner_u, owner_g)
+
+
+def _chown_tree(path: Path, uid: int, gid: int) -> None:
+    """So bind-mounted UE is writable by openfly-ue (non-root user)."""
+    for root, dirs, files in os.walk(path, topdown=False):
+        for name in files:
+            p = Path(root) / name
+            try:
+                os.chown(p, uid, gid, follow_symlinks=False)
+            except OSError as e:
+                _log(f"warn: chown {p}: {e}")
+        for name in dirs:
+            p = Path(root) / name
+            try:
+                os.chown(p, uid, gid, follow_symlinks=False)
+            except OSError as e:
+                _log(f"warn: chown {p}: {e}")
+    try:
+        os.chown(path, uid, gid, follow_symlinks=False)
+    except OSError as e:
+        _log(f"warn: chown {path}: {e}")
+
+
 def _download_file(url: str, dst: Path) -> None:
     _log(f"download: {url}")
     req = urllib.request.Request(url, headers={"User-Agent": "xsubnet-assets-init/1.0"})
@@ -169,6 +224,8 @@ def _ensure_ue_assets() -> None:
     citysample = ue_dir / "CitySample.sh"
     if citysample.is_file():
         _log(f"ue env already present: {ue_dir}")
+        _maybe_chown_ue_for_openfly(ue_dir)
+        _log("ue env ready")
         return
 
     archive_url = (os.environ.get("OPENFLY_UE_ARCHIVE_URL") or "").strip()
@@ -250,6 +307,7 @@ def _ensure_ue_assets() -> None:
     for p in required:
         if not p.is_file():
             raise RuntimeError(f"UE asset validation failed, missing: {p}")
+    _maybe_chown_ue_for_openfly(ue_dir)
     _log("ue env ready")
 
 
