@@ -96,6 +96,9 @@ services:
       OPENFLY_MODEL: /app/models/openfly-agent-7b
       # Metagraph often has axon ip 0.0.0.0; reach host-published miner ports from UE netns (see openfly-ue extra_hosts).
       OPENFLY_VALIDATOR_MINER_AXON_HOST: "${OPENFLY_VALIDATOR_MINER_AXON_HOST:-host.docker.internal}"
+      # Per-round dumps under ./logs/VALIDATOR_SYNTHETIC_DEBUG/<utc-datetime>/ (see template/validator/synthetic_debug.py).
+      VALIDATOR_SYNTHETIC_DEBUG: "${VALIDATOR_SYNTHETIC_DEBUG:-0}"
+      VALIDATOR_SYNTHETIC_DEBUG_DIR: "${VALIDATOR_SYNTHETIC_DEBUG_DIR:-/app/logs/VALIDATOR_SYNTHETIC_DEBUG}"
     command:
       - python
       - neurons/validator.py

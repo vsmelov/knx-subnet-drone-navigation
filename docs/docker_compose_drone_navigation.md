@@ -24,6 +24,8 @@ git submodule update --init --recursive
 
 `./data/teleport_spots.json` is mounted read-only into the validator for random UE teleports before each synthetic round (`OPENFLY_TELEPORT_SPOTS_JSON`). Synthetic interval: `OPENFLY_VALIDATOR_FORWARD_SLEEP` → `--neuron.forward_sleep` (default 20 minutes in code / `.env.example`).
 
+Debug dumps: set **`VALIDATOR_SYNTHETIC_DEBUG=1`** to write each round under **`./logs/VALIDATOR_SYNTHETIC_DEBUG/<UTC-datetime>/`**: `request.json`, `frame.png` (when UE attached a JPEG frame), `miners_replies.json`, `scoring.json`, `metadata.json`. Override directory with **`VALIDATOR_SYNTHETIC_DEBUG_DIR`** (container path, default `/app/logs/VALIDATOR_SYNTHETIC_DEBUG`).
+
 Bittensor keys live in **`./wallets/`** (gitignored); compose mounts that tree to `/root/.bittensor/wallets`. Populate it with `export BT_WALLET_PATH="$PWD/wallets"` and `btcli wallet …`, or copy from an existing `~/.bittensor/wallets` layout.
 
 UnrealCV: **`OPENFLY_UNREALCV_PORT`** is internal to the UE/validator shared network namespace. In this subnet compose we do not publish UnrealCV to host; only validator axon is exposed.

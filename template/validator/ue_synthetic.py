@@ -165,7 +165,7 @@ def maybe_teleport_and_frame(synapse: DroneNavSynapse) -> dict[str, Any] | None:
         b64 = _capture_lit_jpeg_b64(client)
     except Exception as e:
         bt.logging.error(f"UE synthetic teleport/capture failed: {e!r}")
-        return None
+        return {"ue_synthetic_ok": False, "ue_synthetic_error": repr(e)}
     finally:
         if client is not None:
             try:
@@ -197,6 +197,7 @@ def maybe_teleport_and_frame(synapse: DroneNavSynapse) -> dict[str, Any] | None:
 
     bt.logging.info(f"UE synthetic: teleported to #{idx} «{title[:64]}», frame attached, ai_mode=single_step")
     return {
+        "ue_synthetic_ok": True,
         "teleport_index": idx,
         "teleport_title": title,
         "teleport_folder": str(spot.get("folder") or ""),

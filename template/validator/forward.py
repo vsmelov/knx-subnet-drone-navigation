@@ -26,6 +26,11 @@ import bittensor as bt
 
 from template.validator.reward import get_rewards
 from template.validator.synthetic_context import build_synthetic_drone_nav_synapse
+from template.validator.synthetic_debug import (
+    is_enabled as synthetic_debug_enabled,
+    new_run_dir,
+    write_round_artifacts,
+)
 from template.validator.ue_synthetic import maybe_teleport_and_frame
 from template.utils.uids import get_random_uids
 
@@ -77,17 +82,20 @@ async def forward(self):
     synapse, synthetic_context = build_synthetic_drone_nav_synapse(
         validator_step=int(getattr(self, "step", 0)),
     )
-    maybe_teleport_and_frame(synapse)
+    ue_extra = maybe_teleport_and_frame(synapse)
     try:
         merged = json.loads(synapse.synthetic_context_json or "{}")
         if isinstance(merged, dict):
             synthetic_context = merged
     except (TypeError, ValueError, json.JSONDecodeError):
         pass
+    if isinstance(ue_extra, dict) and ue_extra.get("ue_synthetic_ok") is False:
+        synthetic_context = {**synthetic_context, **ue_extra}
     instruction = str(synapse.instruction)
 
+    axons = _axons_for_dendrite(self, miner_uids)
     responses = await self.dendrite(
-        axons=_axons_for_dendrite(self, miner_uids),
+        axons=axons,
         synapse=synapse,
         deserialize=False,
         timeout=float(self.config.neuron.timeout),
@@ -111,6 +119,23 @@ async def forward(self):
         "rewards": [float(x) for x in rewards.tolist()],
     }
     bt.logging.info("DRONE_SCOREBOARD " + json.dumps(scoreboard, ensure_ascii=False))
+
+    if synthetic_debug_enabled():
+        try:
+            run_dir = new_run_dir()
+            write_round_artifacts(
+                run_dir,
+                synapse=synapse,
+                synthetic_context=dict(synthetic_context) if isinstance(synthetic_context, dict) else {},
+                miner_uids=miner_uids,
+                axons=axons,
+                responses=responses,
+                scoreboard=scoreboard,
+                validator_self=self,
+                ue_extra=ue_extra if isinstance(ue_extra, dict) else None,
+            )
+        except Exception as e:
+            bt.logging.warning(f"VALIDATOR_SYNTHETIC_DEBUG dump failed: {e!r}")
 
     bt.logging.info(f"Scored responses: {rewards}")
     # Update the scores based on the rewards. You may want to define your own update_scores function for custom behavior.
