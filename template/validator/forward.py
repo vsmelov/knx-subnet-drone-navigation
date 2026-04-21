@@ -17,6 +17,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import asyncio
 import copy
 import json
 import os
@@ -82,7 +83,9 @@ async def forward(self):
     synapse, synthetic_context = build_synthetic_drone_nav_synapse(
         validator_step=int(getattr(self, "step", 0)),
     )
-    ue_extra = maybe_teleport_and_frame(synapse)
+    # UnrealCV client is synchronous; running it in the default executor avoids blocking the asyncio
+    # loop (otherwise dendrite HTTP may never run while stuck in vget/teleport).
+    ue_extra = await asyncio.to_thread(maybe_teleport_and_frame, synapse)
     try:
         merged = json.loads(synapse.synthetic_context_json or "{}")
         if isinstance(merged, dict):
