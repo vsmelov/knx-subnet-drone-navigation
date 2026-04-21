@@ -1,3 +1,8 @@
+# Минимальный образ только для City Sample + UnrealCV (без Python/torch).
+# Сцена и бинарники — bind-mount: ./OpenFly-Platform:/app/OpenFly-Platform
+#
+#   docker compose build openfly-ue
+
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -30,9 +35,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# NVIDIA Container Toolkit подкладывает libGLX_nvidia.so.* в рантайме, но JSON ICD часто отсутствует — без него Vulkan не стартует.
 RUN mkdir -p /usr/share/vulkan/icd.d
 COPY docker/openfly-ue/nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json
+
 COPY docker/openfly-ue/entrypoint-ue.sh /app/entrypoint-ue.sh
 RUN chmod +x /app/entrypoint-ue.sh
+
+EXPOSE 9030
 
 ENTRYPOINT ["/bin/bash", "/app/entrypoint-ue.sh"]
