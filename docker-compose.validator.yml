@@ -83,6 +83,8 @@ services:
       OPENFLY_UNREALCV_UDS_ON_ATTACH: "1"
       OPENFLY_SYNTHETIC_UE_ENABLED: "1"
       OPENFLY_SYNTHETIC_UE_SOCKET: "/tmp/unrealcv_${OPENFLY_UNREALCV_PORT:-9030}.socket"
+      OPENFLY_TELEPORT_SPOTS_JSON: "${OPENFLY_TELEPORT_SPOTS_JSON:-/app/data/teleport_spots.json}"
+      OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC: "${OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC:-2}"
       OPENFLY_MODEL: /app/models/openfly-agent-7b
     command:
       - python
@@ -97,6 +99,8 @@ services:
       - ${VALIDATOR_WALLET_HOTKEY:-default}
       - --axon.port
       - ${VALIDATOR_AXON_PORT:-9101}
+      - --neuron.forward_sleep
+      - ${OPENFLY_VALIDATOR_FORWARD_SLEEP:-1200}
       - --logging.debug
     volumes:
       - ./logs:/app/logs:rw
@@ -104,3 +108,4 @@ services:
       - ./OpenFly-Platform:/app/OpenFly-Platform:rw
       - ./models:/app/models:rw
       - ./wallets:/root/.bittensor/wallets:rw
+      - ./data:/app/data:ro

@@ -54,7 +54,11 @@ For **host-run** `python neurons/…` or **`offchain_validator_smoke.py`**, set 
   - **`openfly`** — loads the **OpenFly HF VLM inside the miner process** (same dependency pattern as the parent repo `docker/openfly-dashboard/Dockerfile`: CUDA base + `OpenFly-Platform/requirements.txt` + torch/transformers extras). Uses `OpenFly-Platform/train/eval.py:get_action`. Compose **`subnet-miner`** (see `docker-compose.miner.yml` / root `docker-compose.yml`) builds **`docker/subnet-miner/Dockerfile`**, requests a **GPU**, and bind-mounts **`./OpenFly-Platform`** and **`./models`**. Set **`OPENFLY_MODEL`** to a HF id or `/app/models/...` path; optional **`OPENFLY_ATTN_IMPLEMENTATION`**, **`HF_TOKEN`** for gated weights. Validator image stays slim (`Dockerfile`); only the miner stack carries PyTorch.
 - When `OPENFLY_SUBNET_MINER_MODEL=openai`: optional `OPENAI_API_BASE`, `OPENFLY_SUBNET_MINER_OPENAI_MODEL` / `OPENAI_GPT_POLICY_MODEL`.
 
-**Validator note:** the stock validator `forward` in this template does **not** call OpenAI or load the OpenFly VLM; only the miner does today.
+**Validator synthetic rounds (on-chain `template/validator/forward.py`):**
+- **Cadence:** `OPENFLY_VALIDATOR_FORWARD_SLEEP` (seconds) is passed as `--neuron.forward_sleep` (default **1200** = 20 minutes in `template/utils/config.py`; override in `.env`, e.g. `180` for 3 minutes while testing).
+- **Single “AI Step” only:** each round is **one** dendrite query with one `DroneNavSynapse` — there is **no** multi-step “AI Steps” loop in the validator (unlike the main-repo dashboard’s **AI Steps** button). `synthetic_context_json` includes `ai_mode: "single_step"` and `ai_steps_loop: false` when UE prep runs.
+- **UE + teleport (when `OPENFLY_SYNTHETIC_UE_ENABLED=1` in compose):** before querying miners, the validator picks a **random spot** from `OPENFLY_TELEPORT_SPOTS_JSON` (same schema as main repo `web/openfly_dashboard/teleport_spots.json`, shipped under `./data/teleport_spots.json`), applies the pose via **UnrealCV** (same remap as `OpenFly-Platform/train/eval.py`), waits **`OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC`** (default **2**), captures **one** lit JPEG, sets **`instruction`** from the spot’s `instruction_preview`, and attaches **`frame_jpeg_b64`** for miners.
+- The validator image installs **`unrealcv`** + **`opencv-python-headless`** for that path; it does **not** load the OpenFly HF VLM (only miners do, when configured).
 
 ## Quick Start
 

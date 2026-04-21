@@ -14,10 +14,12 @@ From `xsubnet-template` root:
 
 ```bash
 cp .env.example .env
-mkdir -p wallets logs/openfly-compose-tmp logs/ue-dashboard logs
+mkdir -p wallets data logs/openfly-compose-tmp logs/ue-dashboard logs
 chmod 1777 logs/openfly-compose-tmp
 git submodule update --init --recursive
 ```
+
+`./data/teleport_spots.json` is mounted read-only into the validator for random UE teleports before each synthetic round (`OPENFLY_TELEPORT_SPOTS_JSON`). Synthetic interval: `OPENFLY_VALIDATOR_FORWARD_SLEEP` → `--neuron.forward_sleep` (default 20 minutes in code / `.env.example`).
 
 Bittensor keys live in **`./wallets/`** (gitignored); compose mounts that tree to `/root/.bittensor/wallets`. Populate it with `export BT_WALLET_PATH="$PWD/wallets"` and `btcli wallet …`, or copy from an existing `~/.bittensor/wallets` layout.
 

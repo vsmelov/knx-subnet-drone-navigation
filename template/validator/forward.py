@@ -24,6 +24,7 @@ import bittensor as bt
 
 from template.validator.reward import get_rewards
 from template.validator.synthetic_context import build_synthetic_drone_nav_synapse
+from template.validator.ue_synthetic import maybe_teleport_and_frame
 from template.utils.uids import get_random_uids
 
 
@@ -43,6 +44,13 @@ async def forward(self):
     synapse, synthetic_context = build_synthetic_drone_nav_synapse(
         validator_step=int(getattr(self, "step", 0)),
     )
+    maybe_teleport_and_frame(synapse)
+    try:
+        merged = json.loads(synapse.synthetic_context_json or "{}")
+        if isinstance(merged, dict):
+            synthetic_context = merged
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
     instruction = str(synapse.instruction)
 
     responses = await self.dendrite(

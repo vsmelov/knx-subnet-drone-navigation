@@ -10,7 +10,8 @@ COPY neurons ./neurons
 COPY scripts ./scripts
 
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir -e .
+    && pip install --no-cache-dir -e . \
+    && pip install --no-cache-dir unrealcv opencv-python-headless
 
 ENV PYTHONUNBUFFERED=1
 

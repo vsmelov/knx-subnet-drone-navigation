@@ -191,7 +191,7 @@ def add_validator_args(cls, parser):
         "--neuron.forward_sleep",
         type=float,
         help="Seconds to sleep after each synthetic validator forward (pause between rounds).",
-        default=3600.0,
+        default=1200.0,
     )
 
     parser.add_argument(
