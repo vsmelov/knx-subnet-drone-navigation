@@ -38,7 +38,7 @@ mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"
 
-# Общий ./logs/openfly-compose-tmp:/tmp — после kill контейнера может остаться .X99-lock (Xvfb: «already active»).
+# Shared /tmp (Docker named volume with validator, or host bind-mount): remove stale X lock for this display.
 rm -f "/tmp/.X11-unix/X${DISPLAY#:}" "/tmp/.X${DISPLAY#:}-lock"
 Xvfb "${DISPLAY}" -screen 0 1920x1080x24 -ac +extension RANDR +render -noreset &>/tmp/openfly-ue-xvfb.log &
 XVFB_PID=$!

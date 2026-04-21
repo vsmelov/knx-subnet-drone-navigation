@@ -8,14 +8,17 @@ This branch adds two compose entrypoints:
 The validator stack uses `network_mode: service:openfly-ue` so validator traffic can reliably access
 UnrealCV on `127.0.0.1` and UDS socket under shared `/tmp`.
 
+`openfly-ue` and `subnet-validator` mount the same **Docker named volume** (`openfly_ue_validator_tmp`) at `/tmp`, so
+Xvfb lock files and the UnrealCV Unix socket are **not** mixed with the host `logs/` tree (stale `.X*-lock` files
+there used to break Xvfb on unrelated display numbers).
+
 ## 1) Prepare environment
 
 From `xsubnet-template` root:
 
 ```bash
 cp .env.example .env
-mkdir -p wallets data logs/openfly-compose-tmp logs/ue-dashboard logs
-chmod 1777 logs/openfly-compose-tmp
+mkdir -p wallets data logs/ue-dashboard logs
 git submodule update --init --recursive
 ```
 

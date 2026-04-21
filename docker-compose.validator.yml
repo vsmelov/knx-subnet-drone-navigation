@@ -42,9 +42,12 @@ services:
       # Port UnrealCV listens on *inside* the UE container (unrealcv.ini + TCP + shared UDS name).
       OPENFLY_UNREALCV_PORT: "${OPENFLY_UNREALCV_PORT:-9030}"
       OPENFLY_UE_LOGFILE: /app/logs/ue/citysample_stdout.log
+      # Isolate Xvfb/UnrealCV /tmp from the host bind-mount (stale .X*-lock from other runs break startup).
+      OPENFLY_UE_XVFB_DISPLAY: "${OPENFLY_UE_XVFB_DISPLAY:-:99}"
     volumes:
       - ./OpenFly-Platform:/app/OpenFly-Platform:rw
-      - ./logs/openfly-compose-tmp:/tmp:rw
+      # Shared with subnet-validator only: UDS + X locks stay off the host tree.
+      - openfly_ue_validator_tmp:/tmp
       - ./logs/ue-dashboard:/app/logs/ue:rw
     ports:
       # Publish validator axon only. UnrealCV stays internal to UE+validator shared network namespace.
@@ -104,8 +107,11 @@ services:
       - --logging.debug
     volumes:
       - ./logs:/app/logs:rw
-      - ./logs/openfly-compose-tmp:/tmp:rw
+      - openfly_ue_validator_tmp:/tmp
       - ./OpenFly-Platform:/app/OpenFly-Platform:rw
       - ./models:/app/models:rw
       - ./wallets:/root/.bittensor/wallets:rw
       - ./data:/app/data:ro
+
+volumes:
+  openfly_ue_validator_tmp:

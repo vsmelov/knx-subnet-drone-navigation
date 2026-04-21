@@ -64,8 +64,7 @@ For **host-run** `python neurons/…` or **`offchain_validator_smoke.py`**, set 
 
 ```bash
 cd xsubnet-template
-mkdir -p wallets logs/openfly-compose-tmp logs/ue-dashboard logs logs/miner-hf-cache logs/miner-torch-cache
-chmod 1777 logs/openfly-compose-tmp
+mkdir -p wallets logs/ue-dashboard logs logs/miner-hf-cache logs/miner-torch-cache
 git submodule update --init --recursive
 ```
 
