@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import math
 import os
 import random
 import sys
@@ -27,9 +28,9 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def _sleep_after_teleport() -> float:
     try:
-        return float(os.environ.get("OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC", "2").strip() or "2")
+        return float(os.environ.get("OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC", "10").strip() or "10")
     except ValueError:
-        return 2.0
+        return 10.0
 
 
 def _spots_path() -> Path:
@@ -53,8 +54,28 @@ def _load_spots() -> list[dict[str, Any]]:
     return list(raw) if isinstance(raw, list) else []
 
 
+def _init_unrealcv_cameras(client: Any) -> None:
+    """Match UEBridge._camera_init (eval.py): spawn lit cameras + resolution before vset pose."""
+    if not _env_bool("OPENFLY_SYNTHETIC_UE_UNREALCV_CAMERA_INIT", True):
+        return
+    skip_spawn = (os.environ.get("OPENFLY_UE_SKIP_CAMERAS_SPAWN") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if not skip_spawn:
+        client.request("vset /cameras/spawn")
+    client.request("vset /camera/1/size 1920 1080")
+    try:
+        settle = float((os.environ.get("OPENFLY_SYNTHETIC_UE_CAMERA_INIT_SLEEP_SEC") or "1").strip() or "1")
+    except ValueError:
+        settle = 1.0
+    time.sleep(max(0.0, min(settle, 30.0)))
+
+
 def _set_camera_pose_unrealcv(client: Any, x: float, y: float, z: float, pitch: float, yaw: float, roll: float) -> None:
-    """Same coordinate remap as OpenFly-Platform/train/eval.py UEBridge.set_camera_pose."""
+    """Same remap as OpenFly-Platform/train/eval.py UEBridge.set_camera_pose (pitch/yaw in degrees for vset)."""
     x = x * 100
     y = -y * 100
     z = z * 100
@@ -67,6 +88,7 @@ def _set_camera_pose_unrealcv(client: Any, x: float, y: float, z: float, pitch: 
 
 
 def _connect_client() -> Any:
+    """Connect to UnrealCV with retries (TCP port can open before the protocol server accepts clients)."""
     from unrealcv import Client
 
     host = (os.environ.get("OPENFLY_UNREALCV_HOST") or "127.0.0.1").strip()
@@ -78,19 +100,41 @@ def _connect_client() -> Any:
         "on",
     )
     unix_path = f"/tmp/unrealcv_{port}.socket"
-    use_uds = (
-        not tcp_only
-        and sys.platform.startswith("linux")
-        and os.path.exists(unix_path)
-        and _env_bool("OPENFLY_UNREALCV_UDS_ON_ATTACH", False)
-    )
-    if use_uds:
-        c = Client(unix_path, "unix")
-    else:
-        c = Client((host, port))
-    if not c.connect():
-        raise RuntimeError(f"UnrealCV connect failed (uds={use_uds} host={host!r} port={port})")
-    return c
+    try:
+        attempts = int((os.environ.get("OPENFLY_UNREALCV_CONNECT_ATTEMPTS") or "30").strip() or "30")
+    except ValueError:
+        attempts = 30
+    attempts = max(1, min(attempts, 120))
+    try:
+        sleep_sec = float((os.environ.get("OPENFLY_UNREALCV_CONNECT_SLEEP_SEC") or "1").strip() or "1")
+    except ValueError:
+        sleep_sec = 1.0
+    sleep_sec = max(0.1, min(sleep_sec, 10.0))
+
+    uds_wanted = _env_bool("OPENFLY_UNREALCV_UDS_ON_ATTACH", False)
+    last_detail = f"host={host!r} port={port}"
+    for attempt in range(1, attempts + 1):
+        # Re-check each attempt: UDS is often created shortly after TCP starts listening.
+        use_uds = (
+            not tcp_only
+            and sys.platform.startswith("linux")
+            and os.path.exists(unix_path)
+            and uds_wanted
+        )
+        if use_uds:
+            c = Client(unix_path, "unix")
+        else:
+            c = Client((host, port))
+        if c.connect():
+            if attempt > 1:
+                bt.logging.info(
+                    f"UnrealCV connected on attempt {attempt}/{attempts} (uds={use_uds} {last_detail})"
+                )
+            return c
+        last_detail = f"uds={use_uds} host={host!r} port={port}"
+        if attempt < attempts:
+            time.sleep(sleep_sec)
+    raise RuntimeError(f"UnrealCV connect failed after {attempts} attempts ({last_detail})")
 
 
 def _capture_lit_jpeg_b64(client: Any) -> str:
@@ -153,13 +197,16 @@ def maybe_teleport_and_frame(synapse: DroneNavSynapse) -> dict[str, Any] | None:
     client = None
     try:
         client = _connect_client()
+        _init_unrealcv_cameras(client)
+        # Spots store yaw_rad; UnrealCV vset rotation expects degrees (see openfly_ue_dashboard_server rad2deg).
+        yaw_deg = math.degrees(float(spot["yaw_rad"]))
         _set_camera_pose_unrealcv(
             client,
             float(spot["x"]),
             float(spot["y"]),
             float(spot["z"]),
             float(spot.get("pitch_deg", 0.0)),
-            float(spot["yaw_rad"]),
+            yaw_deg,
             0.0,
         )
         time.sleep(_sleep_after_teleport())
@@ -196,7 +243,11 @@ def maybe_teleport_and_frame(synapse: DroneNavSynapse) -> dict[str, Any] | None:
     )
     synapse.synthetic_context_json = json.dumps(ctx, ensure_ascii=False)
 
-    bt.logging.info(f"UE synthetic: teleported to #{idx} «{title[:64]}», frame attached, ai_mode=single_step")
+    bt.logging.info(
+        f"UE synthetic: spot #{idx} «{title[:64]}» "
+        f"xyz=({float(spot['x']):.1f},{float(spot['y']):.1f},{float(spot['z']):.1f}) "
+        f"yaw_deg={yaw_deg:.1f} pitch_deg={float(spot.get('pitch_deg', 0.0)):.1f} — frame attached, ai_mode=single_step"
+    )
     return {
         "ue_synthetic_ok": True,
         "teleport_index": idx,

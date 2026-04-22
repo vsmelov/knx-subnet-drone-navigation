@@ -1,6 +1,7 @@
 # Validator (and optional CPU-only tooling): slim image with bittensor only.
 # **Miner** compose uses `docker/subnet-miner/Dockerfile` (CUDA + OpenFly VLM deps).
 FROM python:3.11-slim
+ARG PIP_EXTRA_INDEX_URL=https://pypi.org/simple
 
 # OpenCV / unrealcv load libxcb at import time in ue_synthetic (headless still needs X client libs).
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -22,9 +23,9 @@ COPY template ./template
 COPY neurons ./neurons
 COPY scripts ./scripts
 
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir -e . \
-    && pip install --no-cache-dir unrealcv opencv-python-headless
+RUN pip install --no-cache-dir --extra-index-url "${PIP_EXTRA_INDEX_URL}" -r requirements.txt \
+    && pip install --no-cache-dir --extra-index-url "${PIP_EXTRA_INDEX_URL}" -e . \
+    && pip install --no-cache-dir --extra-index-url "${PIP_EXTRA_INDEX_URL}" unrealcv opencv-python-headless
 
 ENV PYTHONUNBUFFERED=1
 
