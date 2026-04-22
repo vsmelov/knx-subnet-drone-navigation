@@ -92,13 +92,17 @@ services:
       OPENFLY_SYNTHETIC_UE_ENABLED: "1"
       OPENFLY_SYNTHETIC_UE_SOCKET: "/tmp/unrealcv_${OPENFLY_UNREALCV_PORT:-9030}.socket"
       OPENFLY_TELEPORT_SPOTS_JSON: "${OPENFLY_TELEPORT_SPOTS_JSON:-/app/data/teleport_spots.json}"
-      OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC: "${OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC:-2}"
+      OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC: "${OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC:-10}"
       OPENFLY_MODEL: /app/models/openfly-agent-7b
       # Metagraph often has axon ip 0.0.0.0; reach host-published miner ports from UE netns (see openfly-ue extra_hosts).
       OPENFLY_VALIDATOR_MINER_AXON_HOST: "${OPENFLY_VALIDATOR_MINER_AXON_HOST:-host.docker.internal}"
       # Per-round dumps under ./logs/VALIDATOR_SYNTHETIC_DEBUG/<utc-datetime>/ (see template/validator/synthetic_debug.py).
       VALIDATOR_SYNTHETIC_DEBUG: "${VALIDATOR_SYNTHETIC_DEBUG:-0}"
       VALIDATOR_SYNTHETIC_DEBUG_DIR: "${VALIDATOR_SYNTHETIC_DEBUG_DIR:-/app/logs/VALIDATOR_SYNTHETIC_DEBUG}"
+      KONNEX_CONTROL_PLANE_URL: "${KONNEX_CONTROL_PLANE_URL:-}"
+      KONNEX_INTERNAL_API_TOKEN: "${KONNEX_INTERNAL_API_TOKEN:-}"
+      KONNEX_CONTROL_PLANE_TIMEOUT: "${KONNEX_CONTROL_PLANE_TIMEOUT:-5}"
+      KONNEX_AI_EVIDENCE_DISABLE_REMARK: "${KONNEX_AI_EVIDENCE_DISABLE_REMARK:-0}"
     command:
       - python
       - neurons/validator.py
