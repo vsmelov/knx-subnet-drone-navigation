@@ -93,6 +93,7 @@ services:
       OPENFLY_SYNTHETIC_UE_SOCKET: "/tmp/unrealcv_${OPENFLY_UNREALCV_PORT:-9030}.socket"
       OPENFLY_TELEPORT_SPOTS_JSON: "${OPENFLY_TELEPORT_SPOTS_JSON:-/app/data/teleport_spots.json}"
       OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC: "${OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC:-10}"
+      OPENFLY_SYNTHETIC_UE_TOTAL_TIMEOUT_SEC: "${OPENFLY_SYNTHETIC_UE_TOTAL_TIMEOUT_SEC:-75}"
       OPENFLY_MODEL: /app/models/openfly-agent-7b
       # Metagraph often has axon ip 0.0.0.0; reach host-published miner ports from UE netns (see openfly-ue extra_hosts).
       OPENFLY_VALIDATOR_MINER_AXON_HOST: "${OPENFLY_VALIDATOR_MINER_AXON_HOST:-host.docker.internal}"

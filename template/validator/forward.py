@@ -43,6 +43,20 @@ from template.utils.uids import get_random_uids
 _BIND_LOCAL_AXON_IPS = frozenset({"0.0.0.0", "::", "[::]"})
 
 
+def _ue_synthetic_timeout_sec() -> float:
+    raw = (os.environ.get("OPENFLY_SYNTHETIC_UE_TOTAL_TIMEOUT_SEC") or "").strip()
+    if raw:
+        try:
+            return max(1.0, float(raw))
+        except ValueError:
+            bt.logging.warning(f"Bad OPENFLY_SYNTHETIC_UE_TOTAL_TIMEOUT_SEC={raw!r}; using default")
+    try:
+        settle = float(os.environ.get("OPENFLY_SYNTHETIC_POST_TELEPORT_SLEEP_SEC", "10") or "10")
+    except ValueError:
+        settle = 10.0
+    return max(30.0, settle + 45.0)
+
+
 def _axons_for_dendrite(validator_self, miner_uids):
     """Route dendrite to miners when running in Docker / network_mode: service:openfly-ue.
 
@@ -88,9 +102,21 @@ async def forward(self):
     synapse, synthetic_context = build_synthetic_drone_nav_synapse(
         validator_step=int(getattr(self, "step", 0)),
     )
-    # UnrealCV client is synchronous; running it in the default executor avoids blocking the asyncio
-    # loop (otherwise dendrite HTTP may never run while stuck in vget/teleport).
-    ue_extra = await asyncio.to_thread(maybe_teleport_and_frame, synapse)
+    # UnrealCV client is synchronous and can wedge on a stale UDS/TCP connection.
+    # Keep the validator loop alive: a stuck UE round should degrade one round, not block the subnet.
+    ue_timeout = _ue_synthetic_timeout_sec()
+    try:
+        ue_extra = await asyncio.wait_for(
+            asyncio.to_thread(maybe_teleport_and_frame, synapse),
+            timeout=ue_timeout,
+        )
+    except asyncio.TimeoutError:
+        bt.logging.error(f"UE synthetic teleport/capture timed out after {ue_timeout:.1f}s")
+        ue_extra = {
+            "ue_synthetic_ok": False,
+            "ue_synthetic_error": f"timeout after {ue_timeout:.1f}s",
+            "ue_synthetic_timeout_sec": ue_timeout,
+        }
     try:
         merged = json.loads(synapse.synthetic_context_json or "{}")
         if isinstance(merged, dict):
