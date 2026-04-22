@@ -58,7 +58,7 @@ services:
       # Publish validator axon only. UnrealCV stays internal to UE+validator shared network namespace.
       - "${VALIDATOR_AXON_PORT:-9101}:${VALIDATOR_AXON_PORT:-9101}"
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 ${OPENFLY_UNREALCV_PORT:-9030}"]
+      test: ["CMD-SHELL", "test -S /tmp/unrealcv_${OPENFLY_UNREALCV_PORT:-9030}.socket || nc -z 127.0.0.1 ${OPENFLY_UNREALCV_PORT:-9030}"]
       interval: 15s
       timeout: 5s
       retries: 45
