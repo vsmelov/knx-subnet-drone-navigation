@@ -107,7 +107,7 @@ def publish_evidence_remark(validator_self: Any, *, evidence_hash_value: str, jo
             call_function="remark",
             call_params={"remark": remark},
         )
-        extrinsic = substrate.create_signed_extrinsic(call=call, keypair=validator_self.wallet.hotkey)
+        extrinsic = substrate.create_signed_extrinsic(call=call, keypair=getattr(validator_self.wallet, "coldkey", validator_self.wallet.hotkey))
         receipt = substrate.submit_extrinsic(
             extrinsic,
             wait_for_inclusion=False,
