@@ -35,6 +35,24 @@ btcli wallet new_coldkey --wallet.name miner
 # …repeat for validator, or copy an existing tree: rsync -a ~/.bittensor/wallets/<name>/ ./wallets/<name>/
 ```
 
+**Expected wallet directory structure (`./wallets`):**
+
+```text
+wallets/
+  miner/
+    coldkey
+    coldkeypub.txt
+    hotkeys/
+      default
+  validator/
+    coldkey
+    coldkeypub.txt
+    hotkeys/
+      default
+```
+
+If your `.env` uses different names (for example `MINER_WALLET_HOTKEY=myhk`), the file must exist as `wallets/<wallet_name>/hotkeys/<hotkey_name>`.
+
 For **host-run** `python neurons/…` or **`offchain_validator_smoke.py`**, set the same `BT_WALLET_PATH` (or symlink `./wallets` to your usual location) so the SDK sees the same files as Docker.
 
 **Security (same as any bind mount):** keys under `./wallets` are visible to any code in the container with that mount; treat `./wallets` like a **secret directory** on disk. For **mainnet / serious stake**, prefer a **hotkey-only** host, **coldkey offline**, separate keys for labs vs production, trusted images, and optionally a **read-only** mount (`:ro`) in a compose override if signing still works.
@@ -43,10 +61,22 @@ For **host-run** `python neurons/…` or **`offchain_validator_smoke.py`**, set 
 
 **HF / assets (when you use auto-download):**
 - `HF_TOKEN` — **required** if Hugging Face assets are gated (UE zip / weights). Same role as `HUGGINGFACE_HUB_TOKEN`.
+- For gated Hugging Face assets, users must first open the asset pages in a browser, sign in, and complete/accept the required access form/terms; otherwise downloads will fail even with a token.
+  - Model page: `https://huggingface.co/IPEC-COMMUNITY/openfly-agent-7b`
+  - UE dataset page: `https://huggingface.co/datasets/IPEC-COMMUNITY/OpenFly_DataGen`
 - `OPENFLY_ASSET_AUTO_DOWNLOAD` — `1` (default): `assets-init` downloads model + UE before UE starts; `0`: you place `models/` and `OpenFly-Platform/envs/ue/...` yourself.
 - `OPENFLY_UE_ARCHIVE_URL` — optional; if set, UE is taken from this URL instead of the HF dataset.
 - `OPENFLY_UE_DATASET_REPO`, `OPENFLY_UE_DATASET_SUBDIR` — only matter when `OPENFLY_UE_ARCHIVE_URL` is empty; defaults match OpenFly_DataGen layout.
 - `OPENFLY_DOCKER_UID` / `OPENFLY_DOCKER_GID` — user inside `openfly-ue`; `assets-init` `chown`s the UE tree to this uid/gid on the bind mount so UnrealCV ini edits work (repeat runs skip `chown` if ownership already matches).
+
+**Where assets are downloaded (important):**
+- Downloads are performed by the **`assets-init`** service (not by `openfly-ue` / validator runtime code).
+- UE env is stored on the host at `./OpenFly-Platform/envs/ue/env_ue_smallcity`.
+- Model weights are stored on the host at `./models/openfly-agent-7b`.
+- Typical disk usage in this setup: UE env ~**19 GB**, OpenFly model ~**15 GB** (total ~**34 GB**; leave extra free space for caches/logs).
+- These are bind mounts, so data persists across container restarts/recreates.
+- To avoid auto-download entirely (for example, pre-seeded disks or internal artifact storage), set `OPENFLY_ASSET_AUTO_DOWNLOAD=0` and place files manually in the paths above.
+- To host UE elsewhere, set `OPENFLY_UE_ARCHIVE_URL` to your own HTTP(S) archive URL.
 
 **Miner policy (`neurons/miner.py`):**
 - `OPENFLY_SUBNET_MINER_MODEL` — `openai` (default) or `openfly`.
@@ -112,6 +142,71 @@ Useful flags: `--rounds`, `--sleep`, `--instruction "..."`, `--tag-offchain` (ma
 ## Onchain Runtime
 
 **Subnet registration (once per coldkey/hotkey + `NETUID`):** costs **recycle burn** on that coldkey; needs enough **TAO** balance. Use the same `NETUID` and `SUBTENSOR_CHAIN_ENDPOINT` as in `.env`, and the same wallet **names** as `MINER_WALLET_*` / `VALIDATOR_WALLET_*`.
+
+**Quick register checklist (miner + validator):**
+1. Create/import wallets under `./wallets` (coldkey + hotkey names from `.env`).
+2. Ensure coldkeys have enough TAO for recycle on selected `NETUID`.
+3. Register miner hotkey.
+4. Register validator hotkey.
+5. Start stack and verify both appear on metagraph.
+
+### Concrete commands: create/import + register miner and validator
+
+```bash
+cd xsubnet-template
+mkdir -p wallets
+export BT_WALLET_PATH="$(pwd)/wallets"
+
+# 1) Create miner wallet + hotkey (skip if already imported)
+btcli wallet new_coldkey --wallet.name miner
+btcli wallet new_hotkey --wallet.name miner --wallet.hotkey default
+
+# 2) Create validator wallet + hotkey (skip if already imported)
+btcli wallet new_coldkey --wallet.name validator
+btcli wallet new_hotkey --wallet.name validator --wallet.hotkey default
+
+# 3) (Optional) verify files exist
+ls -la wallets/miner wallets/miner/hotkeys wallets/validator wallets/validator/hotkeys
+```
+
+Set your runtime values (can also be read from `.env`):
+
+```bash
+export NETUID=4
+export SUBTENSOR_CHAIN_ENDPOINT=wss://testnet-rpc1.konnex.world:39944
+export MINER_WALLET_NAME=miner
+export MINER_WALLET_HOTKEY=default
+export VALIDATOR_WALLET_NAME=validator
+export VALIDATOR_WALLET_HOTKEY=default
+```
+
+Register both hotkeys on subnet:
+
+```bash
+# Register miner hotkey
+btcli subnet register \
+  --wallet-name "$MINER_WALLET_NAME" \
+  --hotkey "$MINER_WALLET_HOTKEY" \
+  --netuid "$NETUID" \
+  --network "$SUBTENSOR_CHAIN_ENDPOINT" \
+  --no-prompt -y
+
+# Register validator hotkey
+btcli subnet register \
+  --wallet-name "$VALIDATOR_WALLET_NAME" \
+  --hotkey "$VALIDATOR_WALLET_HOTKEY" \
+  --netuid "$NETUID" \
+  --network "$SUBTENSOR_CHAIN_ENDPOINT" \
+  --no-prompt -y
+```
+
+Verify both are visible on subnet:
+
+```bash
+btcli wallet overview --wallet-name "$MINER_WALLET_NAME" --network "$SUBTENSOR_CHAIN_ENDPOINT"
+btcli wallet overview --wallet-name "$VALIDATOR_WALLET_NAME" --network "$SUBTENSOR_CHAIN_ENDPOINT"
+btcli subnet list --network "$SUBTENSOR_CHAIN_ENDPOINT"
+```
 
 ```bash
 cd xsubnet-template

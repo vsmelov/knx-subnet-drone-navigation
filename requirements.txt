@@ -19,8 +19,9 @@
 # use 9.7.0 here, or `pip install` from your fork / private index if you ship 9.7.1).
 #
 # Dev/tests: pip install -r requirements-dev.txt
-# async-substrate-interface 2.x enforces cyscale vs scalecodec; bittensor 9.7.x still pins scalecodec.
-async-substrate-interface>=1.0,<2
+# Pin exactly: async-substrate-interface 2.x introduces cyscale checks conflicting with scalecodec
+# expected by bittensor 9.7.x; 1.6.4 is a known-good combination for validator startup.
+async-substrate-interface==1.6.4
 bittensor[cli]==9.7.0
 # Pin CLI to the same minor as the SDK; bittensor[cli] only requires bittensor-cli>=9.0.2 and would otherwise float to latest.
 bittensor-cli==9.7.0
