@@ -40,7 +40,8 @@ RUN mkdir -p /usr/share/vulkan/icd.d
 COPY docker/openfly-ue/nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json
 
 COPY docker/openfly-ue/entrypoint-ue.sh /app/entrypoint-ue.sh
-RUN chmod +x /app/entrypoint-ue.sh
+# 0755: container runs as non-root (OPENFLY_DOCKER_UID); others must be able to read the script for bash.
+RUN chmod 0755 /app/entrypoint-ue.sh
 
 EXPOSE 9030
 
